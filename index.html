@@ -131,11 +131,11 @@
   }
   .ask-row button:active{background:var(--green-dark)}
   .qa-list{margin:16px 0 0;display:flex;flex-direction:column;gap:10px}
-  .qa{background:#F8F4E9;border-radius:14px;padding:12px 14px}
-  .qa-f{font-weight:800;font-size:21px;margin-bottom:4px}
-  .qa-a{font-size:20px;color:#4A4238}
+  .qa{background:#F8F4E9;border-radius:14px;padding:14px 16px}
+  .qa-f{font-weight:800;font-size:24px;margin-bottom:6px}
+  .qa-a{font-size:23px;color:#4A4238}
   .qa-a.pending{color:var(--muted);font-style:italic}
-  .qa-empty{color:var(--muted);font-size:19px;margin:0}
+  .qa-empty{color:var(--muted);font-size:21px;margin:0}
   .dots{display:inline-flex;gap:6px;margin-right:10px;vertical-align:middle}
   .dots span{width:10px;height:10px;border-radius:50%;background:var(--green);animation:bounce 1.2s infinite}
   .dots span:nth-child(2){animation-delay:.15s}
@@ -353,6 +353,7 @@
   var qaList = document.getElementById("qaList");
   qaList.dataset.sig = "";
   var scrollAfterLoad = false;
+  var sessionIds = {}; // nur Fragen dieser Sitzung anzeigen – Verlauf nach Neuladen leer
 
   function isNearBottom(){
     return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 220);
@@ -368,6 +369,8 @@
       .then(function(res){ return res.ok ? res.json() : []; })
       .then(function(rows){
         rows = rows.slice().reverse(); // Anzeige: älteste oben, neuste unten
+        // Nur Fragen der aktuellen Sitzung zeigen (nach Neuladen ist der Chat leer)
+        rows = rows.filter(function(q){ return sessionIds[q.id]; });
         var sig = JSON.stringify(rows);
         if(sig === qaList.dataset.sig){ scrollAfterLoad = false; return; } // nichts Neues -> DOM in Ruhe lassen
         qaList.dataset.sig = sig;
@@ -405,11 +408,17 @@
     if(!t) return;
     qInput.value = "";
     scrollAfterLoad = true;
+    var h = headers();
+    h["Prefer"] = "return=representation";
     fetch(FBASE, {
       method: "POST",
-      headers: headers(),
+      headers: h,
       body: JSON.stringify({frage: t, status: "offen"})
-    }).then(function(){ loadQA(); }).catch(function(){});
+    }).then(function(res){ return res.ok ? res.json() : []; })
+      .then(function(created){
+        if(created[0] && created[0].id) sessionIds[created[0].id] = true;
+        loadQA();
+      }).catch(function(){});
   }
 
   qBtn.addEventListener("click", askQuestion);
