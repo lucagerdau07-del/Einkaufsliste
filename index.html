@@ -114,7 +114,28 @@
   }
 
   .hint{text-align:center;color:var(--muted);font-size:15px;margin:22px 8px 0}
-  .state{padding:56px 20px;text-align:center;color:var(--muted);font-size:18px}
+
+  /* Fragen an den Assistenten */
+  .ask{margin-top:18px;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid #F1E9D8;padding:20px 18px}
+  .ask h2{margin:0 0 6px;font-size:20px;font-weight:800}
+  .ask p{margin:0 0 14px;color:var(--muted);font-size:16px}
+  .ask-row{display:flex;gap:10px}
+  .ask-row input{
+    flex:1;min-width:0;font:inherit;font-size:17px;
+    border:2px solid var(--line);border-radius:14px;padding:12px 14px;background:#FFFDF8;color:var(--ink);
+  }
+  .ask-row input:focus{outline:none;border-color:var(--green)}
+  .ask-row button{
+    font:inherit;font-weight:800;font-size:16px;color:#fff;background:var(--green);
+    border:none;border-radius:14px;padding:12px 18px;cursor:pointer;white-space:nowrap;
+  }
+  .ask-row button:active{background:var(--green-dark)}
+  .qa-list{margin:16px 0 0;display:flex;flex-direction:column;gap:10px}
+  .qa{background:#F8F4E9;border-radius:14px;padding:12px 14px}
+  .qa-f{font-weight:800;font-size:16px;margin-bottom:4px}
+  .qa-a{font-size:16px;color:#4A4238}
+  .qa-a.pending{color:var(--muted);font-style:italic}
+  .qa-empty{color:var(--muted);font-size:15px;margin:0}  .state{padding:56px 20px;text-align:center;color:var(--muted);font-size:18px}
   @media (max-width:520px){
     .wrap{padding:0 8px}
     .hero{border-radius:0 0 20px 20px}
@@ -155,6 +176,15 @@
       <button id="missingBtn" type="button">Dazuschreiben</button>
     </div>
     <ul class="missing-list" id="missingList"></ul>
+  </div>
+  <div class="ask">
+    <h2>Frage zur Liste?</h2>
+    <p>Schreib deine Frage hier – du bekommst in einer Minute eine Antwort:</p>
+    <div class="ask-row">
+      <input id="qInput" type="text" placeholder="z. B. Was ist griechischer Joghurt?" maxlength="200" autocomplete="off">
+      <button id="qBtn" type="button">Fragen</button>
+    </div>
+    <div class="qa-list" id="qaList"></div>
   </div>
   <p class="hint">Einfach ein Kästchen antippen, wenn du etwas gekauft hast.</p>
 </section>
@@ -309,6 +339,61 @@
   missingInput.addEventListener("keydown", function(e){
     if(e.key === "Enter") addMissing();
   });
+
+  /* Fragen & Antworten */
+  var FBASE = SUPABASE_URL + "/rest/v1/einkaufsliste_fragen";
+  var qInput = document.getElementById("qInput");
+  var qBtn = document.getElementById("qBtn");
+  var qaList = document.getElementById("qaList");
+  qaList.dataset.sig = "";
+
+  function loadQA(){
+    fetch(FBASE + "?select=id,frage,antwort&order=id.desc&limit=10", {headers: headers()})
+      .then(function(res){ return res.ok ? res.json() : []; })
+      .then(function(rows){
+        var sig = JSON.stringify(rows);
+        if(sig === qaList.dataset.sig) return; // nichts Neues -> DOM in Ruhe lassen
+        qaList.dataset.sig = sig;
+        qaList.innerHTML = "";
+        if(!rows.length){
+          qaList.innerHTML = '<p class="qa-empty">Noch keine Fragen gestellt.</p>';
+          return;
+        }
+        rows.forEach(function(q){
+          var div = document.createElement("div");
+          div.className = "qa";
+          var f = document.createElement("div");
+          f.className = "qa-f";
+          f.textContent = q.frage;
+          div.appendChild(f);
+          var a = document.createElement("div");
+          var hasAnswer = !!q.antwort;
+          a.className = "qa-a" + (hasAnswer ? "" : " pending");
+          a.textContent = hasAnswer ? q.antwort : "… wird gerade beantwortet";
+          div.appendChild(a);
+          qaList.appendChild(div);
+        });
+      })
+      .catch(function(){});
+  }
+
+  function askQuestion(){
+    var t = qInput.value.trim();
+    if(!t) return;
+    qInput.value = "";
+    fetch(FBASE, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({frage: t, status: "offen"})
+    }).then(function(){ loadQA(); }).catch(function(){});
+  }
+
+  qBtn.addEventListener("click", askQuestion);
+  qInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter") askQuestion();
+  });
+  loadQA();
+  setInterval(loadQA, 5000);
 
   listEl.innerHTML = '<div class="state"><div class="spinner"></div>Liste wird geladen …</div>';
 
