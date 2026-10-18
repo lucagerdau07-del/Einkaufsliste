@@ -114,6 +114,8 @@
   }
 
   .hint{text-align:center;color:var(--muted);font-size:21px;margin:22px 8px 0}
+  /* Platz unter der Seite, wenn die Tastatur offen ist (damit nichts dahinter verschwindet) */
+  body.kb-open{padding-bottom:55vh}
 
   /* Fragen an den Assistenten */
   .ask{margin-top:18px;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid #F1E9D8;padding:20px 18px}
@@ -428,10 +430,26 @@
   qInput.addEventListener("keydown", function(e){
     if(e.key === "Enter") askQuestion();
   });
-  // Bei geöffneter Tastatur das Eingabefeld sichtbar halten
-  qInput.addEventListener("focus", function(){
-    setTimeout(function(){ qInput.scrollIntoView({block:"nearest", behavior:"smooth"}); }, 350);
-  });
+  // Bei geöffneter Tastatur das Eingabefeld sichtbar halten:
+  // 1) nach Fokus mittig ins Sichtfeld scrollen, 2) als Backup auf echte
+  // Tastatur-Größenänderung reagieren und unten Platz schaffen.
+  function keepVisibleOnFocus(el){
+    el.addEventListener("focus", function(){
+      setTimeout(function(){ el.scrollIntoView({block:"center", behavior:"smooth"}); }, 450);
+    });
+  }
+  keepVisibleOnFocus(qInput);
+  keepVisibleOnFocus(missingInput);
+  if(window.visualViewport){
+    visualViewport.addEventListener("resize", function(){
+      var kbOpen = visualViewport.height < window.innerHeight - 100;
+      document.body.classList.toggle("kb-open", kbOpen);
+      var ae = document.activeElement;
+      if(kbOpen && (ae === qInput || ae === missingInput)){
+        setTimeout(function(){ ae.scrollIntoView({block:"center", behavior:"smooth"}); }, 120);
+      }
+    });
+  }
   loadQA();
   setInterval(loadQA, 5000);
 
