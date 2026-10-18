@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einkaufsliste</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; font-size: 19px; line-height: 1.5; color: #222; background: #fff; }
+  h1 { font-size: 32px; margin: 8px 0 4px; }
+  .sub { color: #666; margin-bottom: 20px; }
+  .anleitung { background: #f1f8e9; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px; font-size: 18px; }
+  h2 { font-size: 22px; margin: 30px 0 6px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+  .item { display: flex; align-items: center; gap: 14px; padding: 14px 4px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+  .item input[type=checkbox] { width: 32px; height: 32px; accent-color: #2e7d32; flex-shrink: 0; cursor: pointer; margin: 0; }
+  .item .name { flex: 1; }
+  .item .menge { color: #666; font-size: 17px; white-space: nowrap; }
+  .item.done .name, .item.done .menge { text-decoration: line-through; color: #aaa; }
+  .missing { background: #fff8e1; border: 1px solid #ffe082; border-radius: 12px; padding: 16px; margin-top: 36px; }
+  .missing h2 { border: none; margin: 0 0 6px; }
+  .missing ul { padding-left: 22px; margin: 10px 0 0; }
+  .missing li { margin: 6px 0; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .row input[type=text] { flex: 1; font-size: 18px; padding: 12px; border: 2px solid #ccc; border-radius: 10px; min-width: 0; }
+  .row button { font-size: 18px; padding: 12px 18px; background: #2e7d32; color: #fff; border: none; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+  .hint { color: #666; font-size: 16px; margin: 6px 0 0; }
+  #status { text-align: center; color: #666; padding: 40px 0; }
+  .foot { text-align: center; color: #999; font-size: 14px; margin: 36px 0 12px; }
+</style>
+</head>
+<body>
+<h1>Einkaufsliste</h1>
+<div class="sub" id="wocheninfo">Wird geladen …</div>
+
+<div class="anleitung">
+  <b>So geht's:</b> Antippen, wenn etwas im Korb liegt ✅<br>
+  Etwas gibt es nicht? Unten bei „Nicht gefunden" dazuschreiben.
+</div>
+
+<div id="status">Liste wird geladen …</div>
+<div id="liste"></div>
+
+<div class="missing" id="missingBox" style="display:none">
+  <h2>Nicht gefunden?</h2>
+  <p class="hint">Etwas gab es nicht im Laden, oder du willst es nicht kaufen? Schreib es hier kurz dazu:</p>
+  <div class="row">
+    <input type="text" id="missingInput" placeholder="z. B. Erdnussbutter" maxlength="80">
+    <button id="missingBtn">Dazuschreiben</button>
+  </div>
+  <ul id="missingList"></ul>
+</div>
+
+<div class="foot">Jeden Donnerstag kommt hier die neue Liste.</div>
+
+<script>
+var SUPABASE_URL = 'https://ouhqnspyueqkadzzjzei.supabase.co';
+var ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91aHFuc3B5dWVxa2FkenpqemVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDA5NzUsImV4cCI6MjA5OTM3Njk3NX0.5aT5ToXCQ_74ojn_JLZ6cPfXJErkzA02fqNym_xOW-0';
+function headers(extra) {
+  var h = { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' };
+  if (extra) for (var k in extra) h[k] = extra[k];
+  return h;
+}
+var WOCHE = '';
+
+function fmtWoche(w) {
+  var p = w.split('-');
+  return p[2] + '.' + p[1] + '.' + p[0];
+}
+
+async function load() {
+  var statusEl = document.getElementById('status');
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/einkaufsliste?select=*&order=id', { headers: headers() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var rows = await res.json();
+    statusEl.style.display = 'none';
+    render(rows);
+  } catch (e) {
+    statusEl.textContent = 'Die Liste konnte nicht geladen werden. Bitte später noch einmal versuchen.';
+  }
+}
+
+function render(rows) {
+  var liste = document.getElementById('liste');
+  liste.innerHTML = '';
+  var items = rows.filter(function(r) { return r.status !== 'nicht_gefunden'; });
+  var missing = rows.filter(function(r) { return r.status === 'nicht_gefunden'; });
+  if (rows.length > 0) {
+    WOCHE = rows[0].woche;
+    document.getElementById('wocheninfo').textContent = 'Woche ab ' + fmtWoche(WOCHE);
+  } else {
+    document.getElementById('wocheninfo').textContent = '';
+    liste.innerHTML = '<p class="hint">Diese Woche steht nichts auf der Liste.</p>';
+  }
+  var groups = {};
+  items.forEach(function(r) {
+    var k = r.kategorie || 'Sonstiges';
+    (groups[k] = groups[k] || []).push(r);
+  });
+  Object.keys(groups).forEach(function(k) {
+    var h = document.createElement('h2');
+    h.textContent = k;
+    liste.appendChild(h);
+    groups[k].forEach(function(r) {
+      var div = document.createElement('label');
+      div.className = 'item' + (r.status === 'gekauft' ? ' done' : '');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = r.status === 'gekauft';
+      cb.setAttribute('aria-label', r.item);
+      cb.addEventListener('change', function() { toggle(r.id, cb.checked, div, cb); });
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = r.item;
+      div.appendChild(cb);
+      div.appendChild(name);
+      if (r.menge) {
+        var m = document.createElement('span');
+        m.className = 'menge';
+        m.textContent = r.menge;
+        div.appendChild(m);
+      }
+      liste.appendChild(div);
+    });
+  });
+  var box = document.getElementById('missingBox');
+  box.style.display = 'block';
+  var ml = document.getElementById('missingList');
+  ml.innerHTML = '';
+  missing.forEach(function(r) {
+    var li = document.createElement('li');
+    li.textContent = r.item;
+    ml.appendChild(li);
+  });
+}
+
+async function toggle(id, gekauft, div, cb) {
+  var neu = gekauft ? 'gekauft' : 'offen';
+  div.classList.toggle('done', gekauft);
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/einkaufsliste?id=eq.' + id, {
+      method: 'PATCH', headers: headers({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ status: neu })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  } catch (e) {
+    cb.checked = !gekauft;
+    div.classList.toggle('done', !gekauft);
+    alert('Das konnte nicht gespeichert werden. Bitte später noch einmal versuchen.');
+  }
+}
+
+async function addMissing() {
+  var input = document.getElementById('missingInput');
+  var text = input.value.trim();
+  if (!text) return;
+  if (!WOCHE) { alert('Die Liste ist noch nicht geladen.'); return; }
+  var btn = document.getElementById('missingBtn');
+  btn.disabled = true;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/einkaufsliste', {
+      method: 'POST', headers: headers({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ woche: WOCHE, kategorie: '', item: text, menge: '', status: 'nicht_gefunden' })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    input.value = '';
+    load();
+  } catch (e) {
+    alert('Das konnte nicht gespeichert werden. Bitte später noch einmal versuchen.');
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('missingBtn').addEventListener('click', addMissing);
+document.getElementById('missingInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') addMissing();
+});
+
+load();
+</script>
+</body>
+</html>
