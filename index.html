@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Einkaufsliste</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -352,13 +352,24 @@
   var qBtn = document.getElementById("qBtn");
   var qaList = document.getElementById("qaList");
   qaList.dataset.sig = "";
+  var scrollAfterLoad = false;
+
+  function isNearBottom(){
+    return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 220);
+  }
+
+  function scrollChatToBottom(){
+    qaList.scrollIntoView({block:"end", behavior:"smooth"});
+  }
 
   function loadQA(){
+    var wasNearBottom = isNearBottom();
     fetch(FBASE + "?select=id,frage,antwort&order=id.desc&limit=10", {headers: headers()})
       .then(function(res){ return res.ok ? res.json() : []; })
       .then(function(rows){
+        rows = rows.slice().reverse(); // Anzeige: älteste oben, neuste unten
         var sig = JSON.stringify(rows);
-        if(sig === qaList.dataset.sig) return; // nichts Neues -> DOM in Ruhe lassen
+        if(sig === qaList.dataset.sig){ scrollAfterLoad = false; return; } // nichts Neues -> DOM in Ruhe lassen
         qaList.dataset.sig = sig;
         qaList.innerHTML = "";
         if(!rows.length){
@@ -383,6 +394,8 @@
           div.appendChild(a);
           qaList.appendChild(div);
         });
+        if(scrollAfterLoad || wasNearBottom) scrollChatToBottom();
+        scrollAfterLoad = false;
       })
       .catch(function(){});
   }
@@ -391,6 +404,7 @@
     var t = qInput.value.trim();
     if(!t) return;
     qInput.value = "";
+    scrollAfterLoad = true;
     fetch(FBASE, {
       method: "POST",
       headers: headers(),
@@ -401,6 +415,10 @@
   qBtn.addEventListener("click", askQuestion);
   qInput.addEventListener("keydown", function(e){
     if(e.key === "Enter") askQuestion();
+  });
+  // Bei geöffneter Tastatur das Eingabefeld sichtbar halten
+  qInput.addEventListener("focus", function(){
+    setTimeout(function(){ qInput.scrollIntoView({block:"nearest", behavior:"smooth"}); }, 350);
   });
   loadQA();
   setInterval(loadQA, 5000);
